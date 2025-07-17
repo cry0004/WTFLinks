@@ -104,8 +104,16 @@
   </header>
   <div class="container">
     <form method="POST">
-      <input type="text" name="url" placeholder="Paste your URL (https://...)" required />
-      <select name="style">
+      <!-- URL destinazione -->
+      <input
+        type="text"
+        name="url"
+        placeholder="Paste your URL (https://...)"
+        required
+      />
+    
+      <!-- Scelta stile -->
+      <select name="category">
         <option disabled selected>Choose a preset style</option>
         <option value="no-click-here">⚠️ no-click-here</option>
         <option value="click-if-you-dare">💀 click-if-you-dare</option>
@@ -113,7 +121,16 @@
         <option value="free-stuff-here">🎁 free-stuff-here</option>
         <option value="secret-link-inside">🕵️ secret-link-inside</option>
       </select>
-      <input type="text" name="custom_text" placeholder="Or enter your own custom path (e.g. pasta-al-sugo)" />
+    
+      <!-- Slug personalizzato -->
+      <input
+        type="text"
+        name="custom_slug"
+        placeholder="Enter custom path (e.g. pasta-al-sugo)"
+        required
+      />
+    
+      <!-- Bottone invio -->
       <button type="submit">Generate Link</button>
     </form>
 
