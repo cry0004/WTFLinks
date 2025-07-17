@@ -1,88 +1,67 @@
 from flask import Flask, render_template, request, redirect, abort
-import json
-import random
-import string
+import sqlite3
 import os
+import re
 
 app = Flask(__name__)
 
-DB_FILE = "database.json"
+# init DB
+def init_db():
+    conn = sqlite3.connect('links.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT UNIQUE,
+            url TEXT NOT NULL,
+            category TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-def load_db():
-    if not os.path.exists(DB_FILE):
-        with open(DB_FILE, "w") as f:
-            f.write("{}")
-    with open(DB_FILE, "r") as f:
-        return json.load(f)
+init_db()
 
-def save_db(db):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f)
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    if request.method == 'POST':
+        url = request.form['url']
+        category = request.form['category'].strip().lower().replace(' ', '-')
+        custom_slug = request.form.get('custom_slug', '').strip().lower()
 
-def generate_id(length=6):
-    chars = string.ascii_letters + string.digits
-    return ''.join(random.choice(chars) for _ in range(length))
+        # validazione slug
+        if not custom_slug or not re.match(r'^[a-z0-9\-]+$', custom_slug):
+            return "Slug non valido. Usa solo lettere minuscole, numeri e trattini.", 400
 
-# Lista nomi dominio fake
-fake_domains = [
-    "no-click-here",
-    "definitely-not-link",
-    "click-at-your-own-risk",
-    "dont-trust-this-link",
-    "secret-link-inside",
-    "very-suspicious",
-    "totally-safe-link",
-    "click-if-you-dare",
-    "not-a-virus",
-    "free-stuff-here",
-    "do-not-open",
-    "link-from-hell",
-    "weird-link-alert",
-    "suspicious-link",
-    "not-for-humans"
-]
+        slug = f"{category}/{custom_slug}" if category else custom_slug
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        original_url = request.form.get("url")
-        custom_id = request.form.get("custom_id", "").strip().replace(" ", "-")
+        # salva nel DB
+        try:
+            conn = sqlite3.connect('links.db')
+            c = conn.cursor()
+            c.execute('INSERT INTO links (slug, url, category) VALUES (?, ?, ?)', (slug, url, category))
+            conn.commit()
+            conn.close()
+        except sqlite3.IntegrityError:
+            return "Questo slug esiste già. Scegli un altro nome.", 400
 
-        if not original_url or not (original_url.startswith("http://") or original_url.startswith("https://")):
-            return render_template("index.html", error="Please enter a valid URL starting with http:// or https://")
+        short_url = f"{request.host_url}{slug}"
+        return render_template('index.html', short_url=short_url)
 
-        db = load_db()
+    return render_template('index.html')
 
-        # Se custom_id è stato fornito
-        if custom_id:
-            if custom_id in db:
-                return render_template("index.html", error="This custom name is already taken.")
-            new_id = custom_id
-        else:
-            new_id = generate_id()
-            while new_id in db:
-                new_id = generate_id()
+@app.route('/<path:slug>')
+def redirect_slug(slug):
+    conn = sqlite3.connect('links.db')
+    c = conn.cursor()
+    c.execute('SELECT url FROM links WHERE slug = ?', (slug,))
+    result = c.fetchone()
+    conn.close()
 
-        db[new_id] = original_url
-        save_db(db)
-
-        # Usa sempre lo stesso dominio fittizio per coerenza
-        domain = request.host  # tipo pastaalvirus.replit.app
-        short_url = f"https://{domain}/{new_id}"
-
-        return render_template("index.html", short_url=short_url)
-
-    return render_template("index.html")
-
-
-@app.route("/<id>")
-def redirect_link(id):
-    db = load_db()
-    if id in db:
-        return redirect(db[id])
+    if result:
+        return redirect(result[0])
     else:
-        return render_template("404.html", id=id), 404
+        return abort(404)
 
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000, debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
