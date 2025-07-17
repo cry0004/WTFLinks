@@ -23,19 +23,35 @@ def init_db():
 init_db()
 
 @app.route('/', methods=['GET', 'POST'])
-def home():
+def index():
+    error = None
     if request.method == 'POST':
-        url = request.form['url']
-        category = request.form['category'].strip().lower().replace(' ', '-')
-        custom_slug = request.form.get('custom_slug', '').strip().lower()
-
-        # validazione slug
-        if not custom_slug or not re.match(r'^[a-z0-9\-]+$', custom_slug):
-            return "Slug non valido. Usa solo lettere minuscole, numeri e trattini.", 400
-
-        slug = f"{category}/{custom_slug}" if category else custom_slug
-
-        # salva nel DB
+        url = request.form.get('url')
+        preset_style = request.form.get('style')
+        custom_text = request.form.get('custom_text', '').strip()
+        category = request.form.get('category', '').strip().lower().replace(' ', '-')
+        
+        # Check: o uno o l'altro, mai entrambi o nessuno
+        if preset_style and custom_text:
+            error = "Scegli solo uno: preset style oppure testo personalizzato, non entrambi."
+            return render_template('index.html', error=error)
+        
+        if not preset_style and not custom_text:
+            error = "Devi scegliere un preset style oppure inserire un testo personalizzato."
+            return render_template('index.html', error=error)
+        
+        # Determina il path finale
+        final_path = preset_style if preset_style else custom_text
+        
+        # Validazione del path (equivalente alla validazione slug)
+        if not re.match(r'^[a-z0-9\-]+$', final_path.lower()):
+            error = "Path non valido. Usa solo lettere minuscole, numeri e trattini."
+            return render_template('index.html', error=error)
+        
+        # Costruisci lo slug finale
+        slug = f"{category}/{final_path}" if category else final_path
+        
+        # Salva nel DB
         try:
             conn = sqlite3.connect('links.db')
             c = conn.cursor()
@@ -43,12 +59,13 @@ def home():
             conn.commit()
             conn.close()
         except sqlite3.IntegrityError:
-            return "Questo slug esiste già. Scegli un altro nome.", 400
-
+            error = "Questo slug esiste già. Scegli un altro nome."
+            return render_template('index.html', error=error)
+        
         short_url = f"{request.host_url}{slug}"
         return render_template('index.html', short_url=short_url)
-
-    return render_template('index.html')
+    
+    return render_template('index.html', error=error)
 
 @app.route('/<path:slug>')
 def redirect_slug(slug):
@@ -57,7 +74,7 @@ def redirect_slug(slug):
     c.execute('SELECT url FROM links WHERE slug = ?', (slug,))
     result = c.fetchone()
     conn.close()
-
+    
     if result:
         return redirect(result[0])
     else:
